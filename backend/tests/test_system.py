@@ -302,7 +302,8 @@ def test_order_policy_idempotency_and_approval(tmp_path):
                           "priceWithTax": {"value": 1.1, "validFrom": "2099-01-01", "validTo": "2099-12-31", "currency": "EUR"}}
                          for pid in payload["products"]]})
     tokens = {"buyer-token": {"requester_id": "buyer", "customer_id": "123", "role": "buyer", "auto_limit_eur": "500"},
-              "reviewer-token": {"requester_id": "reviewer", "customer_id": "123", "role": "approver"}}
+              "reviewer-token": {"requester_id": "reviewer", "customer_id": "123", "role": "approver"},
+              "other-buyer-token": {"requester_id": "other-buyer", "customer_id": "123", "role": "buyer"}}
     settings = Settings(product_catalog_path=str(CATALOG), database_url=f"sqlite:///{tmp_path / 'orders.db'}",
                         valio_aimo_base_url="https://example.invalid", valio_aimo_api_key="secret",
                         purchasing_tokens_json=json.dumps(tokens))
@@ -354,3 +355,13 @@ def test_order_policy_idempotency_and_approval(tmp_path):
         assert approved.json()["status"] == "CONFIRMED" and len(approved.json()["audit"]) == 4
         finalized_change = client.post(submit_url, json={"product_id": proposal2["recommended_product_id"]}, headers=buyer)
         assert finalized_change.status_code == 409 and finalized_change.json()["error"]["code"] == "invalid_state"
+        other_buyer = {"Authorization": "Bearer other-buyer-token"}
+        other_proposal = client.post("/api/purchase-requests", json={"text": "1 litre milk by 2099-11-16"}, headers=other_buyer).json()["proposal"]
+        records = client.get("/api/records", headers=buyer)
+        assert records.status_code == 200
+        assert {row["id"] for row in records.json()["proposals"]} == {proposal["id"], proposal2["id"]}
+        assert {row["id"] for row in records.json()["orders"]} == {order["id"], pending["id"]}
+        assert all(row["status"] == "CONFIRMED" for row in records.json()["orders"])
+        assert [row["id"] for row in client.get("/api/records", headers=other_buyer).json()["proposals"]] == [other_proposal["id"]]
+        assert client.get("/api/records", headers=other_buyer).json()["orders"] == []
+        assert client.get("/api/records").status_code == 401

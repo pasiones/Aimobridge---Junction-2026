@@ -205,6 +205,27 @@ def create_app(settings: Settings | None = None, transport=None) -> FastAPI:
             visible(row.requester_id, row.customer_id, actor)
             return {"id": row.id, "intent": row.intent, "status": row.status, "created_at": row.created_at.isoformat()}
 
+    @app.get("/api/records")
+    def list_records(actor: dict = Depends(identity)):
+        with app.state.sessions() as db:
+            proposals = db.execute(
+                select(Proposal.id, PurchaseRequest.status)
+                .join(PurchaseRequest, Proposal.request_id == PurchaseRequest.id)
+                .where(PurchaseRequest.requester_id == actor["requester_id"],
+                       PurchaseRequest.customer_id == actor["customer_id"])
+                .order_by(Proposal.quoted_at.desc(), Proposal.id.desc())
+            ).all()
+            orders = db.execute(
+                select(Order.id, Order.status)
+                .join(Proposal, Order.proposal_id == Proposal.id)
+                .where(Order.requester_id == actor["requester_id"],
+                       Order.customer_id == actor["customer_id"])
+                .order_by(Proposal.quoted_at.desc(), Order.id.desc())
+            ).all()
+        return JSONResponse({"proposals": [{"id": record_id, "status": status} for record_id, status in proposals],
+                             "orders": [{"id": record_id, "status": status} for record_id, status in orders]},
+                            headers={"Cache-Control": "no-store"})
+
     @app.get("/api/proposals/{proposal_id}")
     def get_proposal(proposal_id: str, actor: dict = Depends(identity)):
         with app.state.sessions() as db:

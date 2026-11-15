@@ -32,6 +32,8 @@ Run:
 
 Open `http://127.0.0.1:8000/` for the test UI or `http://127.0.0.1:8000/docs` for Swagger. The UI lives in `frontend/index.html` and is served by FastAPI at `/`. It lets a buyer evaluate a request, select any viable or uncertain quoted offer, and submit a local simulated order. Excluded offers are disabled. A separate reviewer can approve or reject the order. Paste a proposal or order ID into **Open saved record** to check persisted results after refreshing. With `DEMO_MODE=true`, it uses localhost-only demo identities; with demo mode off, enter server-issued buyer and reviewer bearer tokens. The supplier API key is never sent to the browser. Run offline tests with `.venv\Scripts\python.exe -m pytest -q`; they use `httpx.MockTransport` and never call the challenge backend.
 
+The **Saved records** drawer lists proposal IDs in its upper half and order IDs in its lower half for the current buyer identity. Selecting an ID fills **Open saved record** and scrolls there; opening it scrolls to the loaded proposal or order. `GET /api/records` supplies the buyer-scoped ID lists without exposing other buyers' records.
+
 ## Continuous integration
 
 [GitHub Actions](./.github/workflows/ci.yml) runs the offline test suite on Python 3.11 and 3.14 for pushes, pull requests, and manual runs. It does not use the Valio Aimo API key or call the challenge backend. The workflow also rejects tracked `.env` files; keep credentials in deployment environment variables. A production deployment job runs after both test jobs pass when the repository variable `VERCEL_DEPLOY_ENABLED` is `true`.

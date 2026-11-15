@@ -75,6 +75,24 @@
     .timeline { list-style:none; padding:0; margin:0; }
     .timeline li { border-left:2px solid var(--line); padding:0 0 15px 14px; margin-left:4px; }
     .timeline li:last-child { padding-bottom:0; }
+    .records-toggle { position:fixed; right:18px; bottom:18px; z-index:20; box-shadow:0 5px 18px #14272438; }
+    .records-backdrop { position:fixed; inset:0; z-index:30; background:#14272480; }
+    .records-panel { position:fixed; inset:0 0 0 auto; z-index:31; display:flex; flex-direction:column; width:min(410px,100vw); height:100dvh; background:#f5f8f5; box-shadow:-8px 0 30px #14272430; }
+    .records-panel-header { padding:20px; background:white; border-bottom:1px solid var(--line); }
+    .records-panel-header .section-heading { align-items:center; }
+    .records-panel-header h2 { margin:0; }
+    .records-panel-header p { margin:4px 0 0; }
+    .records-panel-header .actions { gap:7px; }
+    .records-panel-header button { padding:7px 10px; font-size:13px; }
+    .records-panel-body { display:grid; grid-template-rows:minmax(0,1fr) minmax(0,1fr); gap:12px; flex:1; min-height:0; padding:14px; }
+    .records-group { display:flex; flex-direction:column; min-height:0; border:1px solid var(--line); border-radius:11px; background:white; overflow:hidden; }
+    .records-group h3 { display:flex; justify-content:space-between; margin:0; padding:11px 14px; border-bottom:1px solid var(--line); font-size:15px; }
+    .records-list { flex:1; min-height:0; overflow-y:auto; padding:5px; }
+    .records-list > p { padding:6px 9px; }
+    .record-entry { display:block; width:100%; padding:10px; border:0; border-radius:7px; background:white; color:var(--ink); text-align:left; font-weight:500; }
+    .record-entry:hover,.record-entry:focus-visible { background:var(--pale); }
+    .record-entry .code { display:block; color:var(--ink); }
+    .record-entry .small { display:block; color:var(--muted); }
     @media(max-width:950px) { .offer-card { grid-template-columns:repeat(2,minmax(0,1fr)); } .offer-product,.offer-assessment { grid-column:1 / -1; } }
     @media(max-width:760px) { .grid,.two,.utility-grid { grid-template-columns:1fr; } header { display:block; } header .pill { margin-top:14px; } .facts { grid-template-columns:1fr 1fr; } }
     @media(max-width:520px) { .record-controls { align-items:stretch; flex-direction:column; } .record-controls button { align-self:flex-start; } }
@@ -165,6 +183,27 @@
       </section>
     </div>
   </main>
+  <button id="records-toggle" class="records-toggle" type="button" aria-controls="records-panel" aria-expanded="false">Saved records</button>
+  <div id="records-backdrop" class="records-backdrop hidden"></div>
+  <aside id="records-panel" class="records-panel hidden" role="dialog" aria-modal="true" aria-labelledby="records-panel-title">
+    <div class="records-panel-header">
+      <div class="section-heading">
+        <h2 id="records-panel-title">Saved records</h2>
+        <div class="actions"><button id="records-refresh" class="secondary" type="button">Refresh</button><button id="records-close" class="secondary" type="button">Close</button></div>
+      </div>
+      <p class="muted small">Select an ID to fill Open saved record.</p>
+    </div>
+    <div class="records-panel-body">
+      <section class="records-group" aria-labelledby="saved-proposals-title">
+        <h3 id="saved-proposals-title">Proposals <span id="proposal-count" class="muted">0</span></h3>
+        <div id="saved-proposals" class="records-list"></div>
+      </section>
+      <section class="records-group" aria-labelledby="saved-orders-title">
+        <h3 id="saved-orders-title">Orders <span id="order-count" class="muted">0</span></h3>
+        <div id="saved-orders" class="records-list"></div>
+      </section>
+    </div>
+  </aside>
   <script>
     const $ = id => document.getElementById(id);
     let demoMode = false;
@@ -273,6 +312,64 @@
       const data = response.headers.get('content-type')?.includes('application/json') ? await response.json() : {};
       if (!response.ok) throw new Error(data.error?.message || data.detail || 'Request failed (' + response.status + ').');
       return data;
+    }
+    function scrollToSection(section) {
+      section.scrollIntoView({behavior:'auto', block:'start'});
+    }
+    function closeRecords(restoreFocus = true) {
+      $('records-panel').classList.add('hidden');
+      $('records-backdrop').classList.add('hidden');
+      $('records-toggle').classList.remove('hidden');
+      $('records-toggle').setAttribute('aria-expanded', 'false');
+      document.querySelector('main').inert = false;
+      document.body.style.overflow = '';
+      if (restoreFocus) $('records-toggle').focus();
+    }
+    function selectSavedRecord(id) {
+      closeRecords(false);
+      $('record-id').value = id;
+      scrollToSection($('saved-title').closest('section'));
+      $('record-id').focus({preventScroll:true});
+    }
+    function renderRecordIds(target, rows, emptyText) {
+      if (!rows.length) {
+        target.replaceChildren(el('p', emptyText, 'muted small'));
+        return;
+      }
+      target.replaceChildren(...rows.map(record => {
+        const button = el('button', null, 'record-entry');
+        button.type = 'button';
+        button.append(el('span', record.id, 'code'), el('span', record.status.replaceAll('_', ' ').toLowerCase(), 'small'));
+        button.addEventListener('click', () => selectSavedRecord(record.id));
+        return button;
+      }));
+    }
+    async function refreshRecords() {
+      $('saved-proposals').replaceChildren(el('p', 'Loading proposals…', 'muted small'));
+      $('saved-orders').replaceChildren(el('p', 'Loading orders…', 'muted small'));
+      $('records-refresh').disabled = true;
+      try {
+        const records = await api('/api/records');
+        $('proposal-count').textContent = records.proposals.length;
+        $('order-count').textContent = records.orders.length;
+        renderRecordIds($('saved-proposals'), records.proposals, 'No proposals saved yet.');
+        renderRecordIds($('saved-orders'), records.orders, 'No orders saved yet.');
+      } catch (error) {
+        $('saved-proposals').replaceChildren(el('p', error.message || 'Could not load records.', 'notice error'));
+        $('saved-orders').replaceChildren();
+      } finally {
+        $('records-refresh').disabled = false;
+      }
+    }
+    function openRecords() {
+      $('records-panel').classList.remove('hidden');
+      $('records-backdrop').classList.remove('hidden');
+      $('records-toggle').setAttribute('aria-expanded', 'true');
+      $('records-toggle').classList.add('hidden');
+      document.querySelector('main').inert = true;
+      document.body.style.overflow = 'hidden';
+      $('records-close').focus();
+      refreshRecords();
     }
     function showProposal(value) {
       proposal = value;
@@ -405,6 +502,13 @@
       }
     }
     $('acknowledge').addEventListener('change', syncApprovalState);
+    $('records-toggle').addEventListener('click', openRecords);
+    $('records-close').addEventListener('click', () => closeRecords());
+    $('records-backdrop').addEventListener('click', () => closeRecords());
+    $('records-refresh').addEventListener('click', refreshRecords);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !$('records-panel').classList.contains('hidden')) closeRecords();
+    });
     $('request-form').addEventListener('submit', event => {
       event.preventDefault();
       busy($('evaluate'), async () => {
@@ -441,9 +545,11 @@
       if (id.startsWith('prop_')) {
         showProposal(await api('/api/proposals/' + encodeURIComponent(id)));
         setMessage('Saved proposal loaded.', 'success');
+        scrollToSection($('proposal-section'));
       } else {
         showOrder(await api('/api/orders/' + encodeURIComponent(id)));
         setMessage('Saved simulated order loaded.', 'success');
+        scrollToSection($('order-section'));
       }
     }));
     fetch('/api/health', {cache:'no-store'}).then(response => response.json()).then(async health => {
