@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./orders.db"
     quote_ttl_minutes: int = 15
     demo_mode: bool = False
+    public_demo_credentials: bool = False
     purchasing_tokens_json: str = "{}"
 
 
@@ -150,8 +151,18 @@ def create_app(settings: Settings | None = None, transport=None) -> FastAPI:
     def health():
         return {"status": "ok", "catalog_products": len(app.state.catalog.products),
                 "upstream_configured": bool(settings.valio_aimo_base_url and settings.valio_aimo_api_key),
-                "demo_mode": settings.demo_mode,
+                "demo_mode": settings.demo_mode, "public_demo_credentials": settings.public_demo_credentials,
                 "simulation": True}
+
+    @app.get("/api/demo-credentials", include_in_schema=False)
+    def demo_credentials():
+        if not settings.public_demo_credentials:
+            raise DomainError("not_found", "Public demo credentials are disabled.", 404)
+        buyer = next((key for key, value in tokens.items() if value.get("role") == "buyer"), None)
+        reviewer = next((key for key, value in tokens.items() if value.get("role") == "approver"), None)
+        if not buyer or not reviewer:
+            raise DomainError("demo_credentials_unavailable", "Configure separate buyer and reviewer tokens.", 503)
+        return JSONResponse({"buyer_token": buyer, "reviewer_token": reviewer}, headers={"Cache-Control": "no-store"})
 
     @app.post("/api/purchase-requests")
     async def purchase(payload: PurchaseInput, actor: dict = Depends(identity)):

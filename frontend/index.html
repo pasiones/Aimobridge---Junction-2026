@@ -340,7 +340,7 @@
         setMessage('Saved simulated order loaded.', 'success');
       }
     }));
-    fetch('/api/health', {cache:'no-store'}).then(response => response.json()).then(health => {
+    fetch('/api/health', {cache:'no-store'}).then(response => response.json()).then(async health => {
       demoMode = !!health.demo_mode;
       $('demo-fields').classList.toggle('hidden', !demoMode);
       $('token-fields').classList.toggle('hidden', demoMode);
@@ -348,6 +348,18 @@
       $('connection').textContent = health.upstream_configured ? 'Mock API configured' : 'Mock API not configured';
       $('connection').className = health.upstream_configured ? 'pill good' : 'pill warn';
       $('health-details').textContent = health.catalog_products.toLocaleString() + ' catalog products · ' + (demoMode ? 'local demo authentication' : 'bearer authentication') + ' · simulated orders only';
+      if (health.public_demo_credentials && !demoMode) {
+        try {
+          const response = await fetch('/api/demo-credentials', {cache:'no-store'});
+          if (!response.ok) throw new Error('Demo credentials unavailable.');
+          const credentials = await response.json();
+          $('buyer-token').value = credentials.buyer_token;
+          $('reviewer-token').value = credentials.reviewer_token;
+          $('auth-help').textContent = 'Public demo access is ready. Everyone can submit and review simulated orders.';
+        } catch {
+          $('auth-help').textContent = 'Demo credentials could not be loaded. Enter server-issued tokens.';
+        }
+      }
     }).catch(() => {
       $('connection').textContent = 'Backend unavailable';
       $('connection').className = 'pill bad';

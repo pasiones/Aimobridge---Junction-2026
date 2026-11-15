@@ -218,6 +218,7 @@ def test_end_to_end_without_upstream_is_honest(tmp_path):
         assert (ROOT / "frontend" / "index.html").is_file()
         assert "VALIO_AIMO_API_KEY" not in page.text
         assert client.get("/api/health").json()["demo_mode"] is True
+        assert client.get("/api/demo-credentials").status_code == 404
         headers = {"X-Demo-Identity": "buyer-1"}
         response = client.post("/api/purchase-requests", json={"text": "1000 litres lactose-free milk by 2099-11-16"}, headers=headers)
         assert response.status_code == 200
@@ -227,6 +228,25 @@ def test_end_to_end_without_upstream_is_honest(tmp_path):
         assert proposal["candidates"]
         assert client.post(f"/api/proposals/{proposal['id']}/submit", headers=headers).status_code == 409
         assert client.get(f"/api/proposals/{proposal['id']}").status_code == 401
+
+
+def test_public_demo_credentials_are_opt_in(tmp_path):
+    tokens = {"demo-buyer-token": {"requester_id": "demo-buyer", "customer_id": "123", "role": "buyer"},
+              "demo-reviewer-token": {"requester_id": "demo-reviewer", "customer_id": "123", "role": "approver"}}
+    settings = Settings(product_catalog_path=str(CATALOG), database_url=f"sqlite:///{tmp_path / 'orders.db'}",
+                        valio_aimo_api_key="supplier-secret", purchasing_tokens_json=json.dumps(tokens),
+                        public_demo_credentials=True)
+    app = create_app(settings)
+    with TestClient(app) as client:
+        assert client.get("/api/health").json()["public_demo_credentials"] is True
+        page = client.get("/")
+        assert "demo-buyer-token" not in page.text
+        assert "supplier-secret" not in page.text
+        response = client.get("/api/demo-credentials")
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json() == {"buyer_token": "demo-buyer-token", "reviewer_token": "demo-reviewer-token"}
+        assert "supplier-secret" not in response.text
 
 
 def test_body_limit_without_content_length(tmp_path):
