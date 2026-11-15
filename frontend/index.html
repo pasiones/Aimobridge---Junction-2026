@@ -140,9 +140,9 @@
       <p class="notice">This order exists only in this application. Nothing has been submitted to a Valio Aimo order endpoint.</p>
       <div id="review-actions" class="hidden">
         <h3>Reviewer decision</h3>
-        <p class="muted small">Use a separate reviewer identity. Approval refreshes the offer and can fail if its price or availability changed.</p>
-        <label class="checkbox field"><input id="acknowledge" type="checkbox">I acknowledge the listed stock, cutoff, or delivery uncertainty.</label>
-        <div class="actions"><button id="approve" type="button">Approve simulation</button><button id="reject" type="button" class="danger">Reject</button></div>
+        <p class="muted small">Use a separate reviewer identity and check the acknowledgment box to enable approval. Approval refreshes the offer and can fail if its price or availability changed.</p>
+        <label class="checkbox field"><input id="acknowledge" type="checkbox">I have reviewed the selected offer and any listed stock, cutoff, or delivery uncertainty.</label>
+        <div class="actions"><button id="approve" type="button" disabled>Approve simulation</button><button id="reject" type="button" class="danger">Reject</button></div>
       </div>
       <h3 style="margin-top:22px">Audit history</h3>
       <ol id="audit" class="timeline"></ol>
@@ -252,6 +252,10 @@
       else if (evidence) details.push('Checks passed for this quote; earliest availability is not a delivery guarantee.');
       return details;
     }
+    function syncApprovalState() {
+      $('approve').disabled = order?.status !== 'PENDING_APPROVAL' ||
+        $('review-actions').classList.contains('hidden') || !$('acknowledge').checked;
+    }
     function authHeaders(role) {
       if (demoMode) {
         const identity = $(role === 'buyer' ? 'buyer-name' : 'reviewer-name').value.trim();
@@ -273,6 +277,8 @@
     function showProposal(value) {
       proposal = value;
       order = null;
+      $('acknowledge').checked = false;
+      syncApprovalState();
       selectedProductId = value.recommended_product_id;
       $('submit').textContent = 'Submit selected offer';
       $('pending-change').classList.add('hidden');
@@ -313,6 +319,7 @@
               $('pending-change').textContent = 'Preview only. Click Update pending order to save this selection before a reviewer decides.';
               $('pending-change').classList.remove('hidden');
               $('review-actions').classList.add('hidden');
+              syncApprovalState();
               $('submit').textContent = 'Update pending order';
               $('submit').disabled = false;
             }
@@ -358,6 +365,7 @@
     }
     function showOrder(value) {
       order = value;
+      $('acknowledge').checked = false;
       $('order-section').classList.remove('hidden');
       $('pending-change').classList.add('hidden');
       $('order-status').textContent = value.status.replaceAll('_', ' ');
@@ -366,6 +374,7 @@
       $('order-facts').replaceChildren(...offerFacts(offer));
       $('order-reason').textContent = 'Policy: ' + value.policy_reason.replaceAll('_', ' ') + (offer.reasons?.length ? ' · Caveats: ' + offer.reasons.join(', ') : '');
       $('review-actions').classList.toggle('hidden', value.status !== 'PENDING_APPROVAL');
+      syncApprovalState();
       $('audit').replaceChildren(...(value.audit || []).map(event => {
         const item = el('li');
         item.append(el('strong', event.event), el('div', event.actor_id + ' · ' + new Date(event.at).toLocaleString(), 'muted small'));
@@ -389,11 +398,13 @@
       try { await action(); }
       catch (error) { setMessage(error.message || String(error), 'error'); }
       finally {
-        button.disabled = button === $('submit')
-          ? !selectedProductId || !!order && (order.status !== 'PENDING_APPROVAL' || selectedProductId === order.offer.product_id)
-          : false;
+        if (button === $('submit'))
+          button.disabled = !selectedProductId || !!order && (order.status !== 'PENDING_APPROVAL' || selectedProductId === order.offer.product_id);
+        else if (button === $('approve')) syncApprovalState();
+        else button.disabled = false;
       }
     }
+    $('acknowledge').addEventListener('change', syncApprovalState);
     $('request-form').addEventListener('submit', event => {
       event.preventDefault();
       busy($('evaluate'), async () => {
