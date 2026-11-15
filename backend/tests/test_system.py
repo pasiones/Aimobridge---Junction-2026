@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 from backend.app.core import Catalog, evaluate, litres_per_sales_unit, parse_intent, sales_units_needed
 from backend.app.core import DomainError
@@ -263,6 +264,11 @@ def test_order_policy_idempotency_and_approval(tmp_path):
                         valio_aimo_base_url="https://example.invalid", valio_aimo_api_key="secret",
                         purchasing_tokens_json=json.dumps(tokens))
     app = create_app(settings, httpx.MockTransport(responder))
+    engine = app.state.sessions.kw["bind"]
+    @event.listens_for(engine, "connect")
+    def enable_foreign_keys(connection, _record):
+        connection.execute("PRAGMA foreign_keys=ON")
+    engine.dispose()
     buyer = {"Authorization": "Bearer buyer-token"}
     reviewer = {"Authorization": "Bearer reviewer-token"}
     with TestClient(app) as client:

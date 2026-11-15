@@ -178,6 +178,7 @@ def create_app(settings: Settings | None = None, transport=None) -> FastAPI:
                                           customer_id=actor["customer_id"],
                                           intent=intent, status=status)
             db.add(request_row)
+            db.flush()
             proposal = Proposal(id=uid("prop"), request_id=request_row.id, data=data)
             db.add(proposal)
             db.flush()
@@ -245,6 +246,7 @@ def create_app(settings: Settings | None = None, transport=None) -> FastAPI:
             order = Order(id=uid("ord"), proposal_id=proposal_id, requester_id=actor["requester_id"],
                           customer_id=actor["customer_id"], status=status, data=chosen, policy_reason=reason)
             db.add(order)
+            db.flush()
             db.add(Audit(id=uid("audit"), order_id=order.id, event=status, actor_id=actor["requester_id"], reason=reason))
             db.flush()
             return order_view(order, list(db.scalars(select(Audit).where(Audit.order_id == order.id))))
