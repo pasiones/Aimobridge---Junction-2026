@@ -61,7 +61,18 @@ def test_evaluation_stock_price_and_uncertainty(product):
     result = evaluate(candidate, product, intent, avail, price, "EUR", now)
     assert result["status"] == "viable" and result["subtotal_ex_tax"] == "1190.00" and result["total_inc_tax"] == "1350.00"
     assert result["sales_units_needed"] == 1000
-    assert evaluate(candidate, product, intent, {**avail, "logisticModel": "Terminal"}, price, "EUR", now)["status"] == "uncertain"
+    assert result["availability_evidence"] == {
+        "logistics_model": "Stock", "schedule_status": "single", "reported_available_amount": "1000",
+        "available_sales_unit": "ST", "earliest_available_date": "2026-11-16",
+        "cutoff_at_helsinki": "2026-11-15T23:00:00+02:00", "cutoff_status": "upcoming",
+        "sales_blocked": False}
+    terminal = evaluate(candidate, product, intent,
+                        {**avail, "logisticModel": "Terminal", "scheduleLines": [{**avail["scheduleLines"][0], "availableAmount": 999999}]},
+                        price, "EUR", now)
+    assert terminal["status"] == "uncertain"
+    assert terminal["availability_evidence"]["reported_available_amount"] is None
+    assert terminal["availability_evidence"]["logistics_model"] == "Terminal"
+    assert evaluate(candidate, product, intent, {**avail, "scheduleLines": []}, price, "EUR", now)["availability_evidence"]["schedule_status"] == "none"
     assert "insufficient_stock" in evaluate(candidate, product, intent, {**avail, "scheduleLines": [{**avail["scheduleLines"][0], "availableAmount": 999}]}, price, "EUR", now)["reasons"]
     assert "cutoff_passed" in evaluate(candidate, product, intent, avail, price, "EUR", now + timedelta(days=1))["reasons"]
     assert "invalid_price" in evaluate(candidate, product, intent, avail, {**price, "error": True}, "EUR", now)["reasons"]
@@ -307,6 +318,7 @@ def test_order_policy_idempotency_and_approval(tmp_path):
         assert response.status_code == 200, response.text
         proposal = response.json()["proposal"]
         assert proposal["recommended_product_id"]
+        assert proposal["candidates"][0]["availability_evidence"]["reported_available_amount"] == "100000"
         assert len(calls) == 2 and len(calls[0][1]["products"]) <= 6
         order = client.post(f"/api/proposals/{proposal['id']}/submit", headers=buyer).json()
         assert order["status"] == "CONFIRMED" and order["simulation"] and not order["upstream_order_submitted"]

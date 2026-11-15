@@ -160,6 +160,32 @@ def evaluate(candidate: dict, product: dict, intent: dict, availability: dict, p
     result = dict(candidate)
     result.update(status="excluded", reasons=[], simulation=True, upstream_order_submitted=False)
     reasons = result["reasons"]
+    lines = availability.get("scheduleLines") or []
+    line = lines[0] if len(lines) == 1 else None
+    logistics_model = availability.get("logisticModel") or ""
+    earliest = _date_from_api(line.get("availableDate")) if line else None
+    cutoff_status, cutoff_at_helsinki = "not_reported", None
+    cutoff = availability.get("closingTime")
+    if cutoff:
+        try:
+            parsed_cutoff = datetime.fromisoformat(cutoff.replace("Z", "+00:00"))
+            if parsed_cutoff.tzinfo is None:
+                cutoff_status = "timezone_unknown"
+            else:
+                cutoff_at_helsinki = parsed_cutoff.astimezone(HELSINKI).isoformat()
+                cutoff_status = "passed" if now > parsed_cutoff.astimezone(HELSINKI) else "upcoming"
+        except ValueError:
+            cutoff_status = "invalid"
+    result["availability_evidence"] = {
+        "logistics_model": logistics_model or None,
+        "schedule_status": "none" if not lines else "single" if line else "multiple",
+        "reported_available_amount": str(line["availableAmount"]) if line and logistics_model.casefold() == "stock" else None,
+        "available_sales_unit": line.get("salesUnit") if line else None,
+        "earliest_available_date": earliest.isoformat() if earliest else None,
+        "cutoff_at_helsinki": cutoff_at_helsinki,
+        "cutoff_status": cutoff_status,
+        "sales_blocked": bool(availability.get("salesBlock") or any(item.get("salesBlock") for item in lines)),
+    }
     volume = candidate["litres_per_sales_unit"]
     if volume is None:
         reasons.append("quantity_conversion_unknown")
@@ -175,7 +201,6 @@ def evaluate(candidate: dict, product: dict, intent: dict, availability: dict, p
     result["proposed_delivery_date"] = proposed.isoformat()
     if availability.get("salesBlock"):
         reasons.append("sales_blocked")
-    lines = availability.get("scheduleLines") or []
     if not lines:
         reasons.append("unavailable")
     elif len(lines) != 1:
@@ -200,18 +225,14 @@ def evaluate(candidate: dict, product: dict, intent: dict, availability: dict, p
             reasons.append("logistics_unknown")
         elif Decimal(str(line.get("availableAmount", 0))) < units:
             reasons.append("insufficient_stock")
-    cutoff = availability.get("closingTime")
-    if cutoff:
-        try:
-            parsed = datetime.fromisoformat(cutoff.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                reasons.append("cutoff_timezone_unknown")
-            elif now > parsed.astimezone(HELSINKI):
-                reasons.append("cutoff_passed")
-        except ValueError:
-            reasons.append("cutoff_invalid")
-    else:
+    if cutoff_status == "not_reported":
         reasons.append("cutoff_unconfirmed")
+    elif cutoff_status == "timezone_unknown":
+        reasons.append("cutoff_timezone_unknown")
+    elif cutoff_status == "invalid":
+        reasons.append("cutoff_invalid")
+    elif cutoff_status == "passed":
+        reasons.append("cutoff_passed")
     if price.get("error") or currency != "EUR" or price.get("quantity") != 1:
         reasons.append("invalid_price")
     catalog_price, with_tax = price.get("catalogPrice"), price.get("priceWithTax")
