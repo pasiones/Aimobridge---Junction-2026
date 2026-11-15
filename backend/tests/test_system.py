@@ -33,6 +33,7 @@ def test_intent_monday_and_hard_filter(product):
     shortlist = Catalog(CATALOG).shortlist(intent)
     assert shortlist and all(c["lactose_free_verified"] for c in shortlist)
     assert all("chocolate" not in c["name"].lower() for c in shortlist)
+    assert all("milk free" not in c["name"].lower() for c in shortlist)
     assert litres_per_sales_unit(product) == Decimal("1.0")
     assert sales_units_needed(Decimal("1000"), Decimal("1"), Decimal("0.01")) == 1000
     assert sales_units_needed(Decimal("1000"), Decimal("12"), Decimal("1")) == 84

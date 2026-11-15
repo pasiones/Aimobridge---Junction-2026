@@ -111,7 +111,7 @@ class Catalog:
             lower = name.casefold()
             if not re.search(r"\bmilk(?:drink)?\b", lower):
                 continue
-            if any(x in lower for x in ("chocolate", "coffee", "latte", "quark", "powder", "formula", "flour", "mix", "yoghurt", "yogurt", "fermented", "cream", "ice cream", "coconut", "oat", "soy", "almond", "milk-free", "sour milk")):
+            if any(x in lower for x in ("chocolate", "coffee", "latte", "quark", "powder", "formula", "flour", "mix", "yoghurt", "yogurt", "fermented", "cream", "ice cream", "coconut", "oat", "soy", "almond", "milk-free", "milk free", "sour milk")):
                 continue
             claim = _lactose_claim(p)
             must_be_lactose_free = intent["constraints"]["must_be_lactose_free"]
