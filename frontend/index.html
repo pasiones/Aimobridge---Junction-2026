@@ -23,7 +23,18 @@
     .pill.bad { color:var(--bad); border-color:#edc0bf; background:#fff2f1; }
     .grid { display:grid; grid-template-columns:minmax(0, 1.7fr) minmax(300px, .8fr); gap:18px; align-items:start; }
     .grid > * { min-width:0; }
+    .utility-grid { display:grid; grid-template-columns:minmax(220px,.7fr) minmax(0,1.3fr); gap:18px; }
+    .utility-grid > * { min-width:0; }
     .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px; box-shadow:0 3px 14px #153e2310; margin-bottom:18px; }
+    .utility-card { padding:18px 20px; }
+    .utility-card h2 { font-size:17px; margin-bottom:8px; }
+    .utility-card p { margin:5px 0 10px; }
+    .record-controls { display:flex; align-items:end; gap:10px; }
+    .record-controls .field { flex:1; min-width:0; margin:0; }
+    .record-controls button { flex:none; }
+    #token-fields { margin:12px 0; }
+    #token-fields summary { cursor:pointer; color:var(--brand); font-size:13px; font-weight:700; }
+    #token-fields[open] summary { margin-bottom:12px; }
     .section-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:8px; }
     .section-heading h2 { margin-bottom:0; }
     label { display:block; font-size:13px; font-weight:700; margin-bottom:7px; }
@@ -65,7 +76,8 @@
     .timeline li { border-left:2px solid var(--line); padding:0 0 15px 14px; margin-left:4px; }
     .timeline li:last-child { padding-bottom:0; }
     @media(max-width:950px) { .offer-card { grid-template-columns:repeat(2,minmax(0,1fr)); } .offer-product,.offer-assessment { grid-column:1 / -1; } }
-    @media(max-width:760px) { .grid,.two { grid-template-columns:1fr; } header { display:block; } header .pill { margin-top:14px; } .facts { grid-template-columns:1fr 1fr; } }
+    @media(max-width:760px) { .grid,.two,.utility-grid { grid-template-columns:1fr; } header { display:block; } header .pill { margin-top:14px; } .facts { grid-template-columns:1fr 1fr; } }
+    @media(max-width:520px) { .record-controls { align-items:stretch; flex-direction:column; } .record-controls button { align-self:flex-start; } }
     @media(max-width:520px) { .shell { padding:18px 12px 48px; } .card { padding:17px; } .offer-card { grid-template-columns:1fr; gap:12px; } .offer-product,.offer-assessment { grid-column:auto; } .facts { grid-template-columns:1fr; } }
   </style>
 </head>
@@ -102,22 +114,12 @@
             <div class="field"><label for="buyer-name">Buyer identity</label><input id="buyer-name" value="demo-buyer" autocomplete="off"></div>
             <div class="field"><label for="reviewer-name">Reviewer identity</label><input id="reviewer-name" value="demo-reviewer" autocomplete="off"></div>
           </div>
-          <div id="token-fields" class="hidden">
+          <details id="token-fields" class="hidden">
+            <summary>Change bearer tokens</summary>
             <div class="field"><label for="buyer-token">Buyer bearer token</label><input id="buyer-token" type="password" autocomplete="off" placeholder="Server-issued buyer token"></div>
             <div class="field"><label for="reviewer-token">Reviewer bearer token</label><input id="reviewer-token" type="password" autocomplete="off" placeholder="Server-issued reviewer token"></div>
-          </div>
+          </details>
           <p class="muted small">Credentials stay in this page’s memory and are sent only to this backend. The supplier API key remains on the server.</p>
-        </section>
-        <section class="card">
-          <h2>Backend</h2>
-          <div id="health-details" class="muted small">Loading…</div>
-          <p class="small"><a href="/docs">Open API documentation</a></p>
-        </section>
-        <section class="card">
-          <h2>Open saved record</h2>
-          <p class="muted small">Paste a proposal or order ID to check persisted status with the buyer identity.</p>
-          <div class="field"><label for="record-id">Proposal or order ID</label><input id="record-id" autocomplete="off" placeholder="prop_… or ord_…"></div>
-          <div class="actions"><button id="load-record" type="button" class="secondary">Open record</button></div>
         </section>
       </aside>
     </div>
@@ -146,6 +148,22 @@
       <ol id="audit" class="timeline"></ol>
       <p id="order-id" class="code"></p>
     </section>
+
+    <div class="utility-grid">
+      <section class="card utility-card" aria-labelledby="backend-title">
+        <h2 id="backend-title">Backend</h2>
+        <div id="health-details" class="muted small">Loading…</div>
+        <p class="small"><a href="/docs">Open API documentation</a></p>
+      </section>
+      <section class="card utility-card" aria-labelledby="saved-title">
+        <h2 id="saved-title">Open saved record</h2>
+        <p class="muted small">Check a proposal or order ID using the buyer identity.</p>
+        <div class="record-controls">
+          <div class="field"><label for="record-id">Proposal or order ID</label><input id="record-id" autocomplete="off" placeholder="prop_… or ord_…"></div>
+          <button id="load-record" type="button" class="secondary">Open record</button>
+        </div>
+      </section>
+    </div>
   </main>
   <script>
     const $ = id => document.getElementById(id);
@@ -421,6 +439,7 @@
       demoMode = !!health.demo_mode;
       $('demo-fields').classList.toggle('hidden', !demoMode);
       $('token-fields').classList.toggle('hidden', demoMode);
+      $('token-fields').open = !demoMode && !health.public_demo_credentials;
       $('auth-help').textContent = demoMode ? 'Local demo mode uses separate buyer and reviewer names.' : 'Enter server-issued buyer and reviewer tokens.';
       $('connection').textContent = health.upstream_configured ? 'Mock API configured' : 'Mock API not configured';
       $('connection').className = health.upstream_configured ? 'pill good' : 'pill warn';
@@ -434,6 +453,7 @@
           $('reviewer-token').value = credentials.reviewer_token;
           $('auth-help').textContent = 'Public demo access is ready. Everyone can submit and review simulated orders.';
         } catch {
+          $('token-fields').open = true;
           $('auth-help').textContent = 'Demo credentials could not be loaded. Enter server-issued tokens.';
         }
       }
