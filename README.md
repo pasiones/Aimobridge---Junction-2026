@@ -8,7 +8,7 @@ Use Python 3.11 or later. From the repository root:
 
 ```powershell
 py -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 Copy-Item .env.example .env
 ```
 
@@ -32,7 +32,18 @@ Open `http://127.0.0.1:8000/` for the test UI or `http://127.0.0.1:8000/docs` fo
 
 ## Continuous integration
 
-[GitHub Actions](./.github/workflows/ci.yml) runs the offline test suite on Python 3.11 and 3.14 for pushes, pull requests, and manual runs. It does not use the Valio Aimo API key or call the challenge backend. The workflow also rejects tracked `.env` files; keep credentials in deployment environment variables. No Git remote is configured yet, so the workflow starts running after this repository is pushed to GitHub.
+[GitHub Actions](./.github/workflows/ci.yml) runs the offline test suite on Python 3.11 and 3.14 for pushes, pull requests, and manual runs. It does not use the Valio Aimo API key or call the challenge backend. The workflow also rejects tracked `.env` files; keep credentials in deployment environment variables. A production deployment job runs after both test jobs pass when the repository variable `VERCEL_DEPLOY_ENABLED` is `true`.
+
+## Deploy on Vercel
+
+Vercel loads the root [FastAPI entrypoint](./app.py) ([Vercel FastAPI guide](https://vercel.com/docs/frameworks/backend/fastapi)). The catalog stays bundled with the function, while orders and audit history require an external PostgreSQL database: Vercel's writable `/tmp` is temporary, and this app refuses SQLite when `VERCEL` is set. A [Vercel Marketplace PostgreSQL integration](https://vercel.com/docs/marketplace-storage) such as Neon or Supabase can provide the database. Connecting Neon to the **Production** environment normally injects a pooled `DATABASE_URL` automatically. Verify that exact variable name in Vercel's Environment Variables; if the integration uses a prefix or another name, set `DATABASE_URL` to its pooled connection string manually. The tables are created on first startup; use a migration tool before wider production use.
+
+1. Create a Vercel project linked to this GitHub repository. Keep the project root at the repository root. [vercel.json](./vercel.json) disables Vercel's automatic Git deployments so GitHub Actions deploys only after CI passes.
+2. Connect the Neon database to Vercel Production and verify that `DATABASE_URL` appears there. Add the remaining Production variables: `VALIO_AIMO_BASE_URL`, `VALIO_AIMO_API_KEY`, `VALIO_AIMO_CUSTOMER_ID`, `PURCHASING_TOKENS_JSON`, and `DEMO_MODE=false`. Keep supplier and buyer/reviewer secrets out of GitHub workflow files. The default catalog path is `./data/valio_aimo_junction26_product_data.json`.
+3. Create a Vercel access token and link the project with `vercel link`. Copy `orgId` and `projectId` from the generated `.vercel/project.json` into GitHub Actions secrets named `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`; store the access token as `VERCEL_TOKEN`. The `.vercel/` folder is ignored by Git. See [Vercel's GitHub Actions guide](https://vercel.com/kb/guide/how-can-i-use-github-actions-with-vercel).
+4. In GitHub, create the repository variable `VERCEL_DEPLOY_ENABLED=true`. A push to `main` then runs tests and, after success, uses the Vercel CLI to build and deploy production. Configure the GitHub `production` environment with required reviewers if you want a manual deployment gate.
+
+The Vercel project needs an external database before deployment can succeed. The 87 MB catalog is included in the function bundle; verify the final bundle size and startup time in the first Vercel build. The local [`.env`](./.env) and database files are ignored and must not be uploaded.
 
 ## API example
 

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from backend.app.core import Catalog, evaluate, litres_per_sales_unit, parse_intent, sales_units_needed
 from backend.app.core import DomainError
 from backend.app.main import Settings, create_app
-from backend.app.storage import make_session_factory
+from backend.app.storage import make_session_factory, normalize_database_url
 from backend.app.valio import ValioClient
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -150,6 +150,14 @@ def test_migrates_legacy_request_table(tmp_path):
     with sqlite3.connect(path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(purchase_requests)")}
     assert "raw_text" not in columns
+
+
+def test_vercel_requires_persistent_database(monkeypatch):
+    assert normalize_database_url("postgres://example/db") == "postgresql+psycopg://example/db"
+    assert normalize_database_url("postgresql://example/db") == "postgresql+psycopg://example/db"
+    monkeypatch.setenv("VERCEL", "1")
+    with pytest.raises(RuntimeError, match="persistent external DATABASE_URL"):
+        make_session_factory("sqlite:///./orders.db")
 
 
 def test_deadline_requotes_earlier_delivery_date(tmp_path):

@@ -1,0 +1,11 @@
+.env
+.env.*
+.venv/
+.git/
+.github/
+backend/tests/
+*.db
+*.db-*
+data/first-item-data.json
+data/valio_aimo_junction26_product_data_schema.json
+data/*.csv

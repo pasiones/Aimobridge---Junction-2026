@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import uuid
+import os
 from datetime import datetime, timezone
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.pool import NullPool
 
 
 def uid(prefix: str) -> str:
@@ -57,8 +59,24 @@ class Audit(Base):
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
+def normalize_database_url(url: str) -> str:
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
 def make_session_factory(url: str):
-    engine = create_engine(url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})
+    url = normalize_database_url(url)
+    if os.getenv("VERCEL") and url.startswith("sqlite"):
+        raise RuntimeError("Vercel requires a persistent external DATABASE_URL; SQLite is not supported there.")
+    options = {"pool_pre_ping": True}
+    if url.startswith("sqlite"):
+        options["connect_args"] = {"check_same_thread": False}
+    elif os.getenv("VERCEL"):
+        options["poolclass"] = NullPool
+    engine = create_engine(url, **options)
     Base.metadata.create_all(engine)
     if url.startswith("sqlite"):
         # Early MVP databases stored raw request text. Remove that column so
