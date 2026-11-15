@@ -38,6 +38,17 @@ def test_intent_monday_and_hard_filter(product):
     assert sales_units_needed(Decimal("1000"), Decimal("12"), Decimal("1")) == 84
 
 
+def test_plain_milk_shortlist_does_not_favor_lactose_free_products():
+    intent = parse_intent("I need 5000 litres of milk by Friday. Find an option based on price and availability.",
+                          datetime(2026, 11, 15, 12, tzinfo=HELSINKI))
+    assert intent["constraints"]["must_be_lactose_free"] is False
+    shortlist = Catalog(CATALOG).shortlist(intent)
+    assert shortlist and not shortlist[0]["lactose_free_verified"]
+    assert any(not candidate["lactose_free_verified"] for candidate in shortlist)
+    assert all("coconut" not in candidate["name"].casefold() and "sour milk" not in candidate["name"].casefold()
+               for candidate in shortlist)
+
+
 def test_evaluation_stock_price_and_uncertainty(product):
     candidate = {"product_id": product["id"], "name": "milk", "sales_unit": "ST", "litres_per_sales_unit": "1"}
     intent = {"quantity": "1000", "requested_delivery_date": "2026-11-16"}

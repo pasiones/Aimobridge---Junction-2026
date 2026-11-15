@@ -111,13 +111,18 @@ class Catalog:
             lower = name.casefold()
             if not re.search(r"\bmilk(?:drink)?\b", lower):
                 continue
-            if any(x in lower for x in ("chocolate", "coffee", "latte", "quark", "powder", "formula", "flour", "mix", "yoghurt", "yogurt", "fermented", "cream", "ice cream")):
+            if any(x in lower for x in ("chocolate", "coffee", "latte", "quark", "powder", "formula", "flour", "mix", "yoghurt", "yogurt", "fermented", "cream", "ice cream", "coconut", "oat", "soy", "almond", "milk-free", "sour milk")):
                 continue
             claim = _lactose_claim(p)
-            if intent["constraints"]["must_be_lactose_free"] and not claim:
+            must_be_lactose_free = intent["constraints"]["must_be_lactose_free"]
+            if must_be_lactose_free and not claim:
                 continue
             volume = litres_per_sales_unit(p)
-            score = (10 if claim else 0) + (5 if volume else 0) + (3 if "milk" in lower else 0)
+            score = (5 if volume else 0) + (3 if "milk" in lower else 0)
+            if must_be_lactose_free:
+                score += 10
+            elif not claim and "lactose free" not in lower and "lactose-free" not in lower:
+                score += 2
             if "milk drink" in lower or "milkdrink" in lower:
                 score -= 1
             matches.append({"product_id": p["id"], "name": name, "sales_unit": p["salesUnit"],
